@@ -59,8 +59,8 @@ public class MainActivity extends Activity {
                 WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
 
-        hideSystemBars();
         buildUi();
+        hideSystemBars();
         handler.post(pollTask);
     }
 
@@ -164,6 +164,8 @@ public class MainActivity extends Activity {
 
     private void hideSystemBars() {
         Window window = getWindow();
+        // Ensure PhoneWindow has created its decor before requesting insets.
+        View decor = window.getDecorView();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false);
@@ -175,7 +177,7 @@ public class MainActivity extends Activity {
                 );
             }
         } else {
-            window.getDecorView().setSystemUiVisibility(
+            decor.setSystemUiVisibility(
                     View.SYSTEM_UI_FLAG_FULLSCREEN |
                     View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
@@ -184,6 +186,12 @@ public class MainActivity extends Activity {
                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             );
         }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars();
     }
 
     @Override

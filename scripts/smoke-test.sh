@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p smoke-results
+trap 'adb logcat -d > smoke-results/logcat.txt; adb shell dumpsys activity activities > smoke-results/activity.txt; adb exec-out screencap -p > smoke-results/screen.png' EXIT
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb logcat -c
+for attempt in 1 2 3; do
+  adb shell am force-stop com.vlad.goldticker
+  adb shell am start -W -n com.vlad.goldticker/.MainActivity
+  sleep 5
+  adb shell pidof com.vlad.goldticker
+  adb shell dumpsys activity activities | grep -E '(mResumedActivity|topResumedActivity).*com.vlad.goldticker'
+done
+adb shell input keyevent KEYCODE_HOME
+sleep 2
+adb shell am start -W -n com.vlad.goldticker/.MainActivity
+sleep 5
+adb shell pidof com.vlad.goldticker
+adb shell dumpsys activity activities | grep -E '(mResumedActivity|topResumedActivity).*com.vlad.goldticker'
+if adb logcat -d -b crash | grep -q 'com.vlad.goldticker'; then
+  echo 'GoldTicker crashed during startup/resume'
+  exit 1
+fi
+echo 'PASS: three cold launches and resume without an app crash'
