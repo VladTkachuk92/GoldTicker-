@@ -75,6 +75,9 @@ public class MainActivity extends Activity {
         priceView.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         priceView.setIncludeFontPadding(false);
         priceView.setSingleLine(true);
+        // Single-line mode otherwise measures against a scrolling width,
+        // which prevents auto-size from fitting the full price to the screen.
+        priceView.setHorizontallyScrolling(false);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             priceView.setAutoSizeTextTypeUniformWithConfiguration(

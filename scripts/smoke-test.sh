@@ -3,6 +3,7 @@ set -euo pipefail
 mkdir -p smoke-results
 trap 'adb logcat -d > smoke-results/logcat.txt; adb shell dumpsys activity activities > smoke-results/activity.txt; adb exec-out screencap -p > smoke-results/screen.png' EXIT
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
 for attempt in 1 2 3; do
   adb shell am force-stop com.vlad.goldticker
