@@ -39,6 +39,12 @@ public class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView priceView;
     private boolean requestRunning = false;
+    private Long previousPriceCents;
+    private static final int PRICE_UP = Color.rgb(111, 181, 145);
+    private static final int PRICE_DOWN = Color.rgb(205, 124, 124);
+    private final Runnable resetPriceColor = () -> {
+        if (!isDestroyed() && priceView != null) priceView.setTextColor(Color.WHITE);
+    };
 
     private static final String PAYLOAD =
             "{\"symbols\":{\"tickers\":[\"OANDA:XAUUSD\"]},\"columns\":[\"close\"]}";
@@ -78,6 +84,9 @@ public class MainActivity extends Activity {
         // Single-line mode otherwise measures against a scrolling width,
         // which prevents auto-size from fitting the full price to the screen.
         priceView.setHorizontallyScrolling(false);
+        // Keep auto-fitting, then shrink uniformly around the screen centre.
+        priceView.setScaleX(0.85f);
+        priceView.setScaleY(0.85f);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             priceView.setAutoSizeTextTypeUniformWithConfiguration(
@@ -110,10 +119,18 @@ public class MainActivity extends Activity {
             final Double finalPrice = price;
             handler.post(() -> {
                 requestRunning = false;
-                if (finalPrice != null && priceView != null) {
+                if (!isDestroyed() && finalPrice != null && priceView != null
+                        && !Double.isNaN(finalPrice) && !Double.isInfinite(finalPrice)) {
+                    long cents = Math.round(finalPrice * 100.0);
+                    if (previousPriceCents != null && cents != previousPriceCents.longValue()) {
+                        priceView.setTextColor(cents > previousPriceCents ? PRICE_UP : PRICE_DOWN);
+                        handler.removeCallbacks(resetPriceColor);
+                        handler.postDelayed(resetPriceColor, 2000);
+                    }
+                    previousPriceCents = cents;
                     DecimalFormatSymbols symbols = DecimalFormatSymbols.getInstance(Locale.US);
                     DecimalFormat df = new DecimalFormat("#,##0.00", symbols);
-                    priceView.setText(df.format(finalPrice));
+                    priceView.setText(df.format(cents / 100.0));
                 }
             });
         });
