@@ -17,28 +17,15 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private TradingViewFeed feed;
     private TextView priceView;
-    private boolean requestRunning = false;
     private Long previousPriceCents;
     private static final int PRICE_UP = Color.rgb(111, 181, 145);
     private static final int PRICE_DOWN = Color.rgb(205, 124, 124);
@@ -46,11 +33,7 @@ public class MainActivity extends Activity {
         if (!isDestroyed() && priceView != null) priceView.setTextColor(Color.WHITE);
     };
 
-    private static final String PAYLOAD =
-            "{\"symbols\":{\"tickers\":[\"OANDA:XAUUSD\"]},\"columns\":[\"close\"]}";
-
-    private final Runnable pollTask = new Runnable() {
-        @Override public void run() {
+    @Override public void run() {
             if (!requestRunning) fetchPrice();
             handler.postDelayed(this, 750);
         }
@@ -67,7 +50,15 @@ public class MainActivity extends Activity {
 
         buildUi();
         hideSystemBars();
-        handler.post(pollTask);
+        feed = new TradingViewFeed(new TradingViewFeed.Listener() {
+            @Override public void onPrice(double price) { showPrice(price); }
+            @Override public void onDisconnected() {
+                handler.removeCallbacks(resetPriceColor);
+                previousPriceCents = null;
+                priceView.setText("—");
+                priceView.setTextColor(Color.WHITE);
+            }
+        });
     }
 
     private void buildUi() {
@@ -108,78 +99,27 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
-    private void fetchPrice() {
-        requestRunning = true;
-        executor.execute(() -> {
-            Double price = request("https://scanner.tradingview.com/global/scan");
-            if (price == null) {
-                price = request("https://scanner.tradingview.com/forex/scan");
-            }
-
-            final Double finalPrice = price;
-            handler.post(() -> {
-                requestRunning = false;
-                if (!isDestroyed() && finalPrice != null && priceView != null
-                        && !Double.isNaN(finalPrice) && !Double.isInfinite(finalPrice)) {
-                    long cents = Math.round(finalPrice * 100.0);
-                    if (previousPriceCents != null && cents != previousPriceCents.longValue()) {
-                        priceView.setTextColor(cents > previousPriceCents ? PRICE_UP : PRICE_DOWN);
-                        handler.removeCallbacks(resetPriceColor);
-                        handler.postDelayed(resetPriceColor, 2000);
-                    }
-                    previousPriceCents = cents;
-                    DecimalFormatSymbols symbols = DecimalFormatSymbols.getInstance(Locale.US);
-                    DecimalFormat df = new DecimalFormat("#,##0.00", symbols);
-                    priceView.setText(df.format(cents / 100.0));
-                }
-            });
-        });
+    private void showPrice(double price) {
+        long cents = Math.round(price * 100.0);
+        if (previousPriceCents != null && cents != previousPriceCents.longValue()) {
+            priceView.setTextColor(cents > previousPriceCents ? PRICE_UP : PRICE_DOWN);
+            handler.removeCallbacks(resetPriceColor);
+            handler.postDelayed(resetPriceColor, 2000);
+        }
+        previousPriceCents = cents;
+        DecimalFormat df = new DecimalFormat("#,##0.00",
+                DecimalFormatSymbols.getInstance(Locale.US));
+        priceView.setText(df.format(cents / 100.0));
     }
 
-    private Double request(String endpoint) {
-        HttpURLConnection connection = null;
-        try {
-            URL url = new URL(endpoint);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(4000);
-            connection.setReadTimeout(4000);
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 Android GoldTicker");
+    @Override protected void onStart() {
+        super.onStart();
+        feed.start();
+    }
 
-            byte[] body = PAYLOAD.getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(body.length);
-
-            try (OutputStream os = connection.getOutputStream()) {
-                os.write(body);
-            }
-
-            int code = connection.getResponseCode();
-            if (code < 200 || code >= 300) return null;
-
-            InputStream in = connection.getInputStream();
-            StringBuilder result = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(in, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) result.append(line);
-            }
-
-            JSONObject root = new JSONObject(result.toString());
-            JSONArray data = root.optJSONArray("data");
-            if (data == null || data.length() == 0) return null;
-
-            JSONArray d = data.getJSONObject(0).optJSONArray("d");
-            if (d == null || d.length() == 0 || d.isNull(0)) return null;
-
-            return d.getDouble(0);
-        } catch (Exception ignored) {
-            return null;
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
+    @Override protected void onStop() {
+        feed.stop();
+        super.onStop();
     }
 
     private void hideSystemBars() {
@@ -223,7 +163,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        executor.shutdownNow();
+        feed.destroy();
         super.onDestroy();
     }
 
