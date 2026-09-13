@@ -33,12 +33,6 @@ public class MainActivity extends Activity {
         if (!isDestroyed() && priceView != null) priceView.setTextColor(Color.WHITE);
     };
 
-    @Override public void run() {
-            if (!requestRunning) fetchPrice();
-            handler.postDelayed(this, 750);
-        }
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
